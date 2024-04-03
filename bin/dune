@@ -1,0 +1,9 @@
+(executable
+ (public_name irmin-forester)
+ (name main)
+ (flags (-g))
+ (link_flags (-g))
+ (preprocess
+  (pps ppx_deriving.show ppx_irmin))
+ (libraries irmin.unix irmin-git.unix asai irmin-watcher lwt lwt.unix forester.core))
+
