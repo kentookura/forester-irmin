@@ -12,20 +12,6 @@ module Ranges = struct
   open Range
   open Irmin.Type
 
-  let prim =
-    enum "prim"
-      [
-        ("P", `P);
-        ("Ol", `Ol);
-        ("Ul", `Ul);
-        ("Li", `Li);
-        ("Em", `Em);
-        ("Strong", `Strong);
-        ("Code", `Code);
-        ("Blockquote", `Blockquote);
-        ("Pre", `Pre);
-      ]
-
   let string_source =
     record "string_source" (fun title content -> { title; content })
     |+ field "title" (option string) (fun s -> s.title)
@@ -73,8 +59,21 @@ module Ranges = struct
       ~equal ~compare ~short_hash ~pre_hash ()
 end
 
+let prim =
+  enum "prim"
+    [
+      ("P", `P);
+      ("Ol", `Ol);
+      ("Ul", `Ul);
+      ("Li", `Li);
+      ("Em", `Em);
+      ("Strong", `Strong);
+      ("Code", `Code);
+      ("Blockquote", `Blockquote);
+      ("Pre", `Pre);
+    ]
+
 let date : Prelude.Date.t ty =
-  (* required stuff for serializing abstract types *)
   let pp formatter a = () in
   let of_string s = Ok (Prelude.Date.parse s) in
   let encode _ _ = () in
@@ -97,12 +96,12 @@ type t = Sem.tree
 
 let math_mode = enum "math_mode" [ ("inline", Inline); ("display", Display) ]
 
-let sem_node =
+let sem_node : Sem.node ty =
   variant "node" (fun text -> function Text s -> text s)
   |~ case1 "Text" string (fun s -> Text s)
   |> sealv
 
-let located_sem_node =
+let located_sem_node : Sem.node Range.located ty =
   let open Asai in
   let open Range in
   record "located_sem_node" (fun loc value -> { loc; value })
@@ -186,11 +185,12 @@ let frontmatter =
   |+ field "number" (option string) (fun t -> t.number)
   |> sealr
 
-(* let tree : Sem.tree ty = *)
-(*   record "tree" (fun fm body -> { fm; body }) *)
-(*   |+ field "fm" frontmatter (fun t -> t.fm) *)
-(*   |+ field "body" (list located_sem_node) (fun t -> t.body) *)
-(*   |> sealr *)
+let tree : Sem.tree ty =
+  record "tree" (fun fm body : Sem.tree -> { fm; body })
+  |+ field "fm" frontmatter (fun t -> t.fm)
+  |+ field "body" (list located_sem_node) (fun (t : Sem.tree) -> t.body)
+     (* without annotation thinks that t is obj_method *)
+  |> sealr
 
 (* and t = tree *)
 
@@ -246,16 +246,6 @@ and sem_node =
   |~ case1 "Object_" string (fun s -> Object s)
   |~ case1 "Ref" string (fun s -> Ref s)
   |> sealv
-
-
-  and located_sem_node =
-    let open Range in
-    record "located_sem_node" (fun loc value -> { loc; value })
-    (* |+ field "loc" (option range) (fun t -> t.loc) *)
-    |+ field "value" sem_node (fun t -> t.value)
-
-  and body = list located_sem_node
-
 
   let merge ~old a b =
     let open Irmin.Merge.Infix in
