@@ -5,6 +5,8 @@ open Core
 let foo = List.map (fun n -> Range.(n.value))
 let unlocated node = Range.{ loc = None; value = node }
 
+open Sem
+
 module Ranges = struct
   open Asai
   open Range
@@ -47,6 +49,7 @@ module Ranges = struct
     |> sealr
 
   let range : Range.t ty =
+    (* required stuff for serializing abstract types *)
     let pp formatter a = () in
     let b =
       { source = `File "todo"; offset = 0; start_of_line = 0; line_num = 0 }
@@ -70,8 +73,25 @@ module Ranges = struct
       ~equal ~compare ~short_hash ~pre_hash ()
 end
 
+let date : Prelude.Date.t ty =
+  (* required stuff for serializing abstract types *)
+  let pp formatter a = () in
+  let of_string s = Ok (Prelude.Date.parse s) in
+  let encode _ _ = () in
+  let decode _ = Ok (Prelude.Date.parse "todo") in
+  let encode_bin : _ encode_bin = fun _ _ -> () in
+  let decode_bin _ _ = Prelude.Date.parse "todo" in
+  let unimplemented_size_of = failwith "todo" in
+  let size_of : _ size_of = unimplemented_size_of in
+  let equal _ _ = false in
+  let compare _ _ = 0 in
+  let short_hash ?seed a = 0 in
+  let pre_hash _ _ = () in
+  abstract ~pp ~of_string ~json:(encode, decode)
+    ~bin:(encode_bin, decode_bin, size_of)
+    ~equal ~compare ~short_hash ~pre_hash ()
+
 (* module Tree : Irmin.Contents.S with type t = Sem.tree = struct *)
-open Sem
 
 type t = Sem.tree
 
@@ -123,99 +143,110 @@ let transclusion_opts =
   |+ field "numbered" bool (fun t -> t.numbered)
   |> sealr
 
-(*
-  and sem_node =
-    variant "node"
-      (fun
-        text
-        transclude
-        subtree
-        query
-        link
-        xml_tag
-        unresolved
-        math
-        embed_tex
-        img
-        if_tex
-        prim
-        object_
-        ref
-      -> function
-      | Text str -> text
-      | Transclude (x, y) -> transclude (x, y)
-      | Subtree (x, y) -> subtree (x, y)
-      | Query (x, y) -> query (x, y)
-      (* | Link { dest; title; modifier } -> link { dest; title; modifier } *)
-      | Xml_tag (_, _, _) -> xml_tag
-      | Unresolved str -> unresolved
-      | Math (_, _) -> math
-      | Embed_tex _ -> embed_tex
-      | Img _ -> img
-      | If_tex (x, y) -> if_tex (x, y)
-      | Prim (x, y) -> prim (x, y)
-      | Object _ -> object_
-      | Ref _ -> ref)
-    |~ case1 "Text" string (fun s -> Text s)
-    |~ case1 "Transclude" (pair transclusion_opts tree) (fun (x, y) ->
-           Transclude (x, y))
-    |~ case1 "Subtree" (pair transclusion_opts tree) (fun (x, y) ->
-           Subtree (x, y))
-    |~ case1 "Query" (pair transclusion_opts query) (fun (x, y) -> Query (x, y))
-    (* |~ case1 "Link" string (fun s -> Text s) *)
-    |~ case1 "Xml_tag"
-         (triple string (list @@ pair string node_list) t)
-         (fun s -> Text s)
-    |~ case1 "Unresolved" string (fun s -> Unresolved s)
-    |~ case1 "Math" (pair math_mode t) (fun (x, y) -> Math (x, y))
-    |~ case1 "Embed_tex" string (fun s -> Embed_tex s)
-    |~ case1 "Img" string (fun { path } -> Img { path })
-    |~ case1 "If_tex" string (fun s -> If_tex s)
-    |~ case1 "Prim" string (fun s -> Prim s)
-    |~ case1 "Object_" string (fun s -> Object s)
-    |~ case1 "Ref" string (fun s -> Ref s)
-    |> sealv
+let frontmatter =
+  record "frontmatter"
+    (fun
+      title
+      taxon
+      authors
+      contributors
+      dates
+      addr
+      metas
+      tags
+      parent
+      source_path
+      number
+    ->
+      {
+        title;
+        taxon;
+        authors;
+        contributors;
+        dates;
+        addr;
+        metas;
+        tags;
+        parent;
+        source_path;
+        number;
+      })
+  |+ field "title" (option (list located_sem_node)) (fun t -> t.title)
+  |+ field "taxon" (option string) (fun t -> t.taxon)
+  |+ field "authors" (list string) (fun t -> t.authors)
+  |+ field "contributors" (list string) (fun t -> t.contributors)
+  |+ field "dates" (list date) (fun t -> t.dates)
+  |+ field "addr" (option string) (fun t -> t.addr)
+  |+ field "metas"
+       (list (pair string (list located_sem_node)))
+       (fun t -> t.metas)
+  |+ field "tags" (list string) (fun t -> t.tags)
+  |+ field "parent" (option string) (fun t -> t.parent)
+  |+ field "source_path" (option string) (fun t -> t.source_path)
+  |+ field "number" (option string) (fun t -> t.number)
+  |> sealr
 
-  and frontmatter =
-    record "frontmatter"
-      (fun
-        title
-        taxon
-        authors
-        contributors
-        dates
-        addr
-        metas
-        tags
-        parent
-        source_path
-        number
-      ->
-        {
-          title;
-          taxon;
-          authors;
-          contributors;
-          dates;
-          addr;
-          metas;
-          tags;
-          parent;
-          source_path;
-          number;
-        })
-    |+ field "title" (list sem_node) (fun t -> t.title)
-    |+ field "taxon" string (fun t -> t.taxon)
-    |+ field "authors" string (fun t -> t.authors)
-    |+ field "contributors" string (fun t -> t.contributors)
-    |+ field "dates" string (fun t -> t.dates)
-    |+ field "addr" (option string) (fun t -> t.addr)
-    |+ field "metas" (list (pair string t)) (fun t -> t.metas)
-    |+ field "tags" (list string) (fun t -> t.tags)
-    |+ field "parent" (option string) (fun t -> t.parent)
-    |+ field "source_path" (option string) (fun t -> t.source_path)
-    |+ field "number" (option string) (fun t -> t.number)
-    |> sealr
+(* let tree : Sem.tree ty = *)
+(*   record "tree" (fun fm body -> { fm; body }) *)
+(*   |+ field "fm" frontmatter (fun t -> t.fm) *)
+(*   |+ field "body" (list located_sem_node) (fun t -> t.body) *)
+(*   |> sealr *)
+
+(* and t = tree *)
+
+(*
+and sem_node =
+  variant "node"
+    (fun
+      text
+      transclude
+      subtree
+      query
+      (* link *)
+        xml_tag
+      unresolved
+      math
+      embed_tex
+      img
+      if_tex
+      prim
+      object_
+      ref
+    -> function
+    | Text str -> text
+    | Transclude (x, y) -> transclude (x, y)
+    | Subtree (x, y) -> subtree (x, y)
+    | Query (x, y) -> query (x, y)
+    (* | Link { dest; title; modifier } -> link { dest; title; modifier } *)
+    | Xml_tag (_, _, _) -> xml_tag
+    | Unresolved str -> unresolved
+    | Math (_, _) -> math
+    | Embed_tex _ -> embed_tex
+    | Img _ -> img
+    | If_tex (x, y) -> if_tex (x, y)
+    | Prim (x, y) -> prim (x, y)
+    | Object _ -> object_
+    | Ref _ -> ref)
+  |~ case1 "Text" string (fun s -> Text s)
+  |~ case1 "Transclude" (pair transclusion_opts tree) (fun (x, y) ->
+         Transclude (x, y))
+  |~ case1 "Subtree" (pair transclusion_opts tree) (fun (x, y) ->
+         Subtree (x, y))
+  |~ case1 "Query" (pair transclusion_opts query) (fun (x, y) -> Query (x, y))
+  (* |~ case1 "Link" string (fun s -> Text s) *)
+  |~ case1 "Xml_tag"
+       (triple string (list @@ pair string node_list) t)
+       (fun s -> Text s)
+  |~ case1 "Unresolved" string (fun s -> Unresolved s)
+  |~ case1 "Math" (pair math_mode t) (fun (x, y) -> Math (x, y))
+  |~ case1 "Embed_tex" string (fun s -> Embed_tex s)
+  |~ case1 "Img" string (fun { path } -> Img { path })
+  |~ case1 "If_tex" string (fun s -> If_tex s)
+  |~ case1 "Prim" string (fun s -> Prim s)
+  |~ case1 "Object_" string (fun s -> Object s)
+  |~ case1 "Ref" string (fun s -> Ref s)
+  |> sealv
+
 
   and located_sem_node =
     let open Range in
@@ -225,13 +256,6 @@ let transclusion_opts =
 
   and body = list located_sem_node
 
-  and tree =
-    record "tree" (fun fm body -> { fm; body })
-    |+ field "fm" frontmatter (fun t -> t.fm)
-    |+ field "body" body (fun t -> t.body)
-    |> sealr
-
-  and t = tree
 
   let merge ~old a b =
     let open Irmin.Merge.Infix in
