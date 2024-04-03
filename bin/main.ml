@@ -90,111 +90,111 @@ let date : Prelude.Date.t ty =
     ~bin:(encode_bin, decode_bin, size_of)
     ~equal ~compare ~short_hash ~pre_hash ()
 
-(* module Tree : Irmin.Contents.S with type t = Sem.tree = struct *)
+module Tree : Irmin.Contents.S with type t = Sem.tree = struct
+  type t = Sem.tree
 
-type t = Sem.tree
+  let math_mode = enum "math_mode" [ ("inline", Inline); ("display", Display) ]
 
-let math_mode = enum "math_mode" [ ("inline", Inline); ("display", Display) ]
+  let sem_node : Sem.node ty =
+    variant "node" (fun text -> function Text s -> text s)
+    |~ case1 "Text" string (fun s -> Text s)
+    |> sealv
 
-let sem_node : Sem.node ty =
-  variant "node" (fun text -> function Text s -> text s)
-  |~ case1 "Text" string (fun s -> Text s)
-  |> sealv
+  let located_sem_node : Sem.node Range.located ty =
+    let open Asai in
+    let open Range in
+    record "located_sem_node" (fun loc value -> { loc; value })
+    |+ field "loc" (option Ranges.range) (fun t -> None)
+    |+ field "value" sem_node (fun t -> t.value)
+    |> sealr
 
-let located_sem_node : Sem.node Range.located ty =
-  let open Asai in
-  let open Range in
-  record "located_sem_node" (fun loc value -> { loc; value })
-  |+ field "loc" (option Ranges.range) (fun t -> None)
-  (* let* loc = t.loc in *)
-  (* Some (loc, `Msg "This shouldn't be here")) *)
-  |+ field "value" sem_node (fun t -> t.value)
-  |> sealr
+  let transclusion_opts =
+    record "transclusion_opts"
+      (fun
+        toc
+        show_heading
+        show_metadata
+        title_override
+        taxon_override
+        expanded
+        numbered
+      ->
+        {
+          toc;
+          show_heading;
+          show_metadata;
+          title_override;
+          taxon_override;
+          expanded;
+          numbered;
+        })
+    |+ field "toc" bool (fun t -> t.toc)
+    |+ field "show_heading" bool (fun t -> t.show_heading)
+    |+ field "show_metadata" bool (fun t -> t.show_metadata)
+    |+ field "title_override"
+         (option (list located_sem_node))
+         (fun t -> t.title_override)
+    |+ field "taxon_override" (option string) (fun t -> t.taxon_override)
+    |+ field "expanded" bool (fun t -> t.expanded)
+    |+ field "numbered" bool (fun t -> t.numbered)
+    |> sealr
 
-let transclusion_opts =
-  record "transclusion_opts"
-    (fun
-      toc
-      show_heading
-      show_metadata
-      title_override
-      taxon_override
-      expanded
-      numbered
-    ->
-      {
-        toc;
-        show_heading;
-        show_metadata;
-        title_override;
-        taxon_override;
-        expanded;
-        numbered;
-      })
-  |+ field "toc" bool (fun t -> t.toc)
-  |+ field "show_heading" bool (fun t -> t.show_heading)
-  |+ field "show_metadata" bool (fun t -> t.show_metadata)
-  |+ field "title_override"
-       (option (list located_sem_node))
-       (fun t -> t.title_override)
-  |+ field "taxon_override" (option string) (fun t -> t.taxon_override)
-  |+ field "expanded" bool (fun t -> t.expanded)
-  |+ field "numbered" bool (fun t -> t.numbered)
-  |> sealr
+  let frontmatter =
+    record "frontmatter"
+      (fun
+        title
+        taxon
+        authors
+        contributors
+        dates
+        addr
+        metas
+        tags
+        parent
+        source_path
+        number
+      ->
+        {
+          title;
+          taxon;
+          authors;
+          contributors;
+          (* let* loc = t.loc in *)
+          (* Some (loc, `Msg "This shouldn't be here")) *)
+          dates;
+          addr;
+          metas;
+          tags;
+          parent;
+          source_path;
+          number;
+        })
+    |+ field "title" (option (list located_sem_node)) (fun t -> t.title)
+    |+ field "taxon" (option string) (fun t -> t.taxon)
+    |+ field "authors" (list string) (fun t -> t.authors)
+    |+ field "contributors" (list string) (fun t -> t.contributors)
+    |+ field "dates" (list date) (fun t -> t.dates)
+    |+ field "addr" (option string) (fun t -> t.addr)
+    |+ field "metas"
+         (list (pair string (list located_sem_node)))
+         (fun t -> t.metas)
+    |+ field "tags" (list string) (fun t -> t.tags)
+    |+ field "parent" (option string) (fun t -> t.parent)
+    |+ field "source_path" (option string) (fun t -> t.source_path)
+    |+ field "number" (option string) (fun t -> t.number)
+    |> sealr
 
-let frontmatter =
-  record "frontmatter"
-    (fun
-      title
-      taxon
-      authors
-      contributors
-      dates
-      addr
-      metas
-      tags
-      parent
-      source_path
-      number
-    ->
-      {
-        title;
-        taxon;
-        authors;
-        contributors;
-        dates;
-        addr;
-        metas;
-        tags;
-        parent;
-        source_path;
-        number;
-      })
-  |+ field "title" (option (list located_sem_node)) (fun t -> t.title)
-  |+ field "taxon" (option string) (fun t -> t.taxon)
-  |+ field "authors" (list string) (fun t -> t.authors)
-  |+ field "contributors" (list string) (fun t -> t.contributors)
-  |+ field "dates" (list date) (fun t -> t.dates)
-  |+ field "addr" (option string) (fun t -> t.addr)
-  |+ field "metas"
-       (list (pair string (list located_sem_node)))
-       (fun t -> t.metas)
-  |+ field "tags" (list string) (fun t -> t.tags)
-  |+ field "parent" (option string) (fun t -> t.parent)
-  |+ field "source_path" (option string) (fun t -> t.source_path)
-  |+ field "number" (option string) (fun t -> t.number)
-  |> sealr
+  let tree : Sem.tree ty =
+    record "tree" (fun fm body : Sem.tree -> { fm; body })
+    |+ field "fm" frontmatter (fun t -> t.fm)
+    |+ field "body" (list located_sem_node) (fun (t : Sem.tree) -> t.body)
+       (* without annotation thinks that t is obj_method *)
+    |> sealr
 
-let tree : Sem.tree ty =
-  record "tree" (fun fm body : Sem.tree -> { fm; body })
-  |+ field "fm" frontmatter (fun t -> t.fm)
-  |+ field "body" (list located_sem_node) (fun (t : Sem.tree) -> t.body)
-     (* without annotation thinks that t is obj_method *)
-  |> sealr
+  let t = tree
+  let merge = Irmin.Merge.(option (idempotent t))
 
-(* and t = tree *)
-
-(*
+  (*
 and sem_node =
   variant "node"
     (fun
@@ -247,13 +247,8 @@ and sem_node =
   |~ case1 "Ref" string (fun s -> Ref s)
   |> sealv
 
-  let merge ~old a b =
-    let open Irmin.Merge.Infix in
-    old () >|=* fun old ->
-    let old = match old with None -> () | Some o -> o in
-    old
   *)
-(* end *)
+end
 
 module Git_store = Irmin_git_unix.FS.KV (Irmin.Contents.String)
 
